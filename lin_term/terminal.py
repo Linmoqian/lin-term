@@ -32,7 +32,16 @@ TERMINAL_THEME = Theme(
         "warn": "yellow",
         "error": "bold red",
         "debug": "dim magenta",
-        "tag": "dim",
+        # 文本标签与语义同色：标签 + 符号 + 消息三段同色，扫视更直接
+        "tag.stage": "bold blue",
+        "tag.step": "blue",
+        "tag.info": "white",
+        "tag.metric": "cyan",
+        "tag.result": "bold cyan",
+        "tag.success": "green",
+        "tag.warn": "yellow",
+        "tag.error": "bold red",
+        "tag.debug": "dim magenta",
         "context.key": "dim cyan",
         "context.value": "dim white",
     }
@@ -105,7 +114,7 @@ class Terminal:
         """一个大的程序阶段开始：分隔线 + 标题。只用于大分区，不应频繁出现。"""
         self.console.print()
         self.console.rule(
-            f"[tag]{escape(TAG_TEXT['stage'])}[/tag] "
+            f"[tag.stage]{escape(TAG_TEXT['stage'])}[/tag.stage] "
             f"[stage]▶ {escape(message)}[/stage]",
             align="left",
         )
@@ -130,7 +139,7 @@ class Terminal:
 
     def _kv_line(self, symbol: str, role: str, name: str, value: Any, unit: str) -> None:
         line = (
-            f"[tag]{escape(TAG_TEXT[role])}[/tag] "
+            f"[tag.{role}]{escape(TAG_TEXT[role])}[/tag.{role}] "
             f"[{role}.name]{symbol} {escape(name):<18}[/{role}.name]"
             f"[{role}.value]{escape(_format_value(value))}[/{role}.value]"
         )
@@ -169,9 +178,9 @@ class Terminal:
     # ---- 内部 ----
 
     def _line(self, role: str, symbol: str, message: str, **context: Any) -> None:
-        """统一消息行：标签 + 符号 + 消息，再带可选上下文。"""
+        """统一消息行：标签 + 符号 + 消息（同语义色），再带可选上下文。"""
         self.console.print(
-            f"[tag]{escape(TAG_TEXT[role])}[/tag] "
+            f"[tag.{role}]{escape(TAG_TEXT[role])}[/tag.{role}] "
             f"[{role}]{symbol} {escape(message)}[/{role}]"
         )
         self._context(**context)
