@@ -8,10 +8,18 @@ from __future__ import annotations
 
 import math
 import numbers
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 from rich.console import Console
 from rich.markup import escape
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.prompt import Prompt
 from rich.theme import Theme
 
@@ -43,6 +51,10 @@ TERMINAL_THEME = Theme(
         "input": "cyan",
         "select": "cyan",
         "select.option": "dim cyan",
+        # 进度（进行中=蓝，完成由 BarColumn finished_style 转绿）
+        "progress": "blue",
+        "progress.percentage": "white",
+        "progress.download": "dim",
         # 文本标签与语义同色：标签 + 符号 + 消息三段同色，扫视更直接
         "tag.stage": "bold blue",
         "tag.step": "blue",
@@ -55,6 +67,7 @@ TERMINAL_THEME = Theme(
         "tag.debug": "grey50",
         "tag.input": "cyan",
         "tag.select": "cyan",
+        "tag.progress": "blue",
     }
 )
 
@@ -108,7 +121,44 @@ TAG_TEXT = {
     "debug": "[debug]",
     "input": "[input]",
     "select": "[select]",
+    "progress": "[progress]",
 }
+
+
+class _ProgressTask:
+    """进度条句柄：progress() 返回的轻量对象，绑定一个 rich 任务。"""
+
+    def __init__(self, progress: Progress, task_id: int):
+        self._progress = progress
+        self._task_id = task_id
+        self._progress.start()
+
+    def advance(self, advance: float = 1.0) -> None:
+        """推进进度（默认 1 步）。"""
+        self._progress.advance(self._task_id, advance)
+
+    def update(
+        self,
+        *,
+        completed: float | None = None,
+        total: float | None = None,
+        description: str | None = None,
+    ) -> None:
+        """直接设置进度/总量/描述；描述文本会自动转义。"""
+        fields: dict[str, Any] = {}
+        if completed is not None:
+            fields["completed"] = completed
+        if total is not None:
+            fields["total"] = total
+        if description is not None:
+            fields["description"] = escape(description)
+        self._progress.update(self._task_id, **fields)
+
+    def __enter__(self) -> _ProgressTask:
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self._progress.stop()
 
 
 class Terminal:
@@ -138,6 +188,61 @@ class Terminal:
     def info(self, message: str, **context: Any) -> None:
         """普通信息，程序的背景声音，不抢视觉注意力。"""
         self._line("info", "●", message, **context)
+
+    # ---- 进度 ----
+
+    def progress(self, description: str, *, total: int | None = None) -> _ProgressTask:
+        """实时进度条（进行中=蓝，完成=绿）。
+
+        TTY 下原地刷新一行（与 step 同语义色）；非 TTY（管道 / 重定向 / CI）
+        静默不渲染、任务照常推进，保证输出稳定可日志化。
+
+        用法:
+            with term.progress("Analyzing cells", total=48) as bar:
+                for cell in cells:
+                    bar.advance()
+        """
+        progress = Progress(
+            TextColumn(
+                f"[tag.progress]{escape(TAG_TEXT['progress'])}[/tag.progress] "
+                "[progress]{task.description}[/progress]",
+                justify="left",
+            ),
+            BarColumn(
+                bar_width=24,
+                style="grey37",
+                complete_style="bold blue",
+                finished_style="green",
+            ),
+            TaskProgressColumn(),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            console=self.console,
+        )
+        task_id = progress.add_task(escape(description), total=total)
+        return _ProgressTask(progress, task_id)
+
+    def track(
+        self,
+        sequence: Iterable[Any],
+        description: str,
+        *,
+        total: int | None = None,
+    ) -> Iterator[Any]:
+        """遍历序列并显示进度条（progress 的便捷形态，循环内自动推进）。
+
+        total 缺省时尝试取 len(sequence)，不可取则显示为不确定进度。
+        """
+        if total is None:
+            try:
+                total = len(sequence)  # type: ignore[arg-type]
+            except (TypeError, AttributeError):
+                total = None
+
+        with self.progress(description, total=total) as bar:
+            for item in sequence:
+                yield item
+                bar.advance()
 
     # ---- 数值 ----
 

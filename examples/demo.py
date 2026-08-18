@@ -8,11 +8,33 @@
 from __future__ import annotations
 
 import argparse
+import time
 
 import numpy as np
 
 from lin_term import term
 
+
+def demo_progress() -> None:
+    """进度条演示：TTY 下实时刷新一行，非 TTY（管道/CI）静默。"""
+
+    term.stage("Progress")
+
+    total = 48
+    with term.progress("Analyzing cells", total=total) as bar:
+        for cell in range(total):
+            time.sleep(0.02)  # 模拟每个 cell 的计算耗时
+            bar.advance()
+
+    term.success("Cells analyzed", cells=total)
+
+    # track：循环便捷形态，total 自动取 len()
+    names = [f"cell-{i}" for i in range(12)]
+    collected = [
+        name
+        for name in term.track(names, "Collecting names")
+    ]
+    term.info("Collected", count=len(collected))
 
 def demo_dataset() -> np.ndarray:
     """阶段一：加载数据——stage / step / metric / info / debug。"""
@@ -153,6 +175,7 @@ def main() -> None:
 
     data = demo_dataset()
     demo_analysis(data)
+    demo_progress()
     demo_formatting()
     demo_exception()
     demo_interactive()

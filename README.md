@@ -41,6 +41,8 @@ pip install lin-term             # 或从任意项目安装
 |---|---|---|---|---|
 | `stage(message)` | `[stage]` | ▶ | bold blue | 大阶段开始（空行+标题，无分隔线） |
 | `step(message, **ctx)` | `[step]` | → | blue | 阶段内操作步骤 |
+| `progress(desc, total=None)` | `[progress]` | ━ | blue→green | 实时进度条（context manager） |
+| `track(seq, desc, total=None)` | `[progress]` | ━ | blue→green | 遍历序列并显示进度 |
 | `info(message, **ctx)` | `[info]` | ● | grey70 | 次要信息 |
 | `metric(name, value, unit="")` | `[metric]` | │ | grey70 | 中间指标（次要信息） |
 | `result(name, value, unit="")` | `[result]` | ◆ | bold blue | 核心结果（高亮） |
@@ -65,6 +67,27 @@ pip install lin-term             # 或从任意项目安装
 - `NaN` / `Inf` / `-Inf` 大写明确
 - numpy 数组摘要为 `ndarray(48, 12842, 2) float64`，避免整数组刷屏
 - 其余类型原样 `str()`
+
+## 进度条（进行中=蓝，完成=绿）
+
+```python
+# 手动推进：context manager 形态
+with term.progress("Analyzing cells", total=48) as bar:
+    for cell in cells:
+        bar.advance()   # 或 bar.update(completed=n)
+
+# 循环便捷形态：自动推进，total 缺省时取 len()
+for cell in term.track(cells, "Analyzing cells"):
+    ...
+```
+
+```text
+[progress] Analyzing cells ━━━━━━━━━━━━━━━━ 73% 35/48 0:00:03
+```
+
+- TTY 下原地刷新一行；**非 TTY（管道/重定向/CI）时只输出一行最终状态**（如 `100% 48/48`），不闪烁、可日志化
+- `total=None` 时显示为不确定进度（`5/?`，条呈脉冲）
+- 进行中条为蓝色，完成后转绿，与状态语义一致
 
 ## 交互（青色）
 
