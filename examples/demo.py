@@ -14,8 +14,8 @@ import numpy as np
 from lin_term import term
 
 
-def demo_normal() -> None:
-    """模拟一个真实科研分析流程（普通模式）。"""
+def demo_dataset() -> np.ndarray:
+    """阶段一：加载数据——stage / step / metric / info / debug。"""
 
     term.stage("RT2 Analysis")
 
@@ -32,33 +32,56 @@ def demo_normal() -> None:
         frames=2381,
     )
 
-    term.step("Calculating rotational dynamics")
-    dr = 0.0329482384234
-    tau = 4.8217
-
-    term.result("Dr", dr, "rad²/s")
-    term.result("tau_turn", tau, "s")
-    term.result("omega", 1.20482738492384e-06, "rad/s")
-
+    # debug 默认关闭：普通模式不显示，--debug 时才输出
     term.debug(
-        "Curve fitting parameters",
+        "Trajectory properties",
+        shape=data.shape,
+        dtype=data.dtype,
+    )
+
+    return data
+
+
+def demo_analysis(data: np.ndarray) -> None:
+    """阶段二：旋转动力学——step / debug / result / error / warn / success。"""
+
+    term.stage("Rotational Dynamics")
+
+    term.step("Curve fitting")
+
+    # 含方括号的值已自动转义，不会破坏输出
+    term.debug(
+        "Fitting parameters",
         p0=[0.1, 3.0],
         bounds=(0, 10),
         threshold=0.35,
     )
 
-    term.info(
-        "Fitting diagnostics",
-        shape=data.shape,
-        dtype=data.dtype,
-        bad_values=float("nan"),
-        max_abs=float("inf"),
+    term.result("Dr", 0.0329482384234, "rad²/s")
+    term.result("tau_turn", 4.8217, "s")
+    term.result("omega", 1.20482738492384e-06, "rad/s")
+
+    # error 只输出错误，不自动 raise，程序可以继续
+    term.error(
+        "Curve fitting failed",
+        cell=3,
+        reason="singular matrix",
     )
+    term.info("Skipping cell", cell=3)
 
     term.warn(
         "Too few turning events",
         cell=18,
         events=2,
+    )
+
+    # numpy 标量 / NaN / Inf 自动格式化
+    term.info(
+        "Fit diagnostics",
+        r2=np.float64(0.9821),
+        bad_values=float("nan"),
+        max_abs=float("inf"),
+        shape=data.shape,
     )
 
     term.success(
@@ -68,8 +91,28 @@ def demo_normal() -> None:
     )
 
 
+def demo_formatting() -> None:
+    """数值格式化规则一览（metric 与 result 共用同一格式化器）。"""
+
+    term.stage("Value Formatting")
+
+    term.metric("int", 12842)
+    term.metric("float", 0.0329482384234)
+    term.metric("sci", 1.20482738492384e-06, "rad/s")
+    term.metric("zero", 0.0)
+    term.metric("nan", float("nan"))
+    term.metric("inf", float("inf"), "s")
+    term.metric("neg_inf", float("-inf"))
+    term.metric("bool", True)
+    term.metric("tuple", (0, 10))
+    term.metric("array", np.array([[1.0, 2.0], [3.0, 4.0]]))
+    term.metric("complex", np.complex128(0.1 + 0.2j))
+
+
 def demo_exception() -> None:
     """exception() 演示：traceback 面板（debug 模式含局部变量）。"""
+
+    term.stage("Exception")
 
     term.step("Running an operation that will fail")
 
@@ -89,7 +132,9 @@ def main() -> None:
 
     term.set_debug(args.debug)
 
-    demo_normal()
+    data = demo_dataset()
+    demo_analysis(data)
+    demo_formatting()
     demo_exception()
 
     term.stage("Done")
