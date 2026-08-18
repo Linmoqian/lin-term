@@ -8,6 +8,11 @@ from __future__ import annotations
 
 import math
 import numbers
+import os
+import select
+import sys
+import termios
+import tty
 from typing import Any, Iterable, Iterator
 
 from rich.console import Console
@@ -50,7 +55,9 @@ TERMINAL_THEME = Theme(
         # 交互提示（青）
         "input": "cyan",
         "select": "cyan",
-        "select.option": "dim cyan",
+        "select.option": "grey70",
+        "select.highlight": "bold cyan",
+        "select.value": "white",
         # 进度（进行中=蓝，完成由 BarColumn finished_style 转绿）
         "progress": "blue",
         "progress.percentage": "white",
@@ -307,44 +314,114 @@ class Terminal:
         *,
         default: str | None = None,
     ) -> str | None:
-        """等待用户从给定选项中选择一个（交互提示，青色）。
+        """方向键菜单：给定选项后用 ↑/↓ 移动高亮、Enter 确认（交互提示，青色）。
 
-        选项以编号列出，可输入编号或选项值，回车取 default；
-        非法输入自动重试。无交互终端时不阻塞，直接返回 default。
+        - 初始高亮停在 default 所在项；
+        - ↑/↓ 循环移动，Enter 确认；q / Esc 取消返回 None；Ctrl+C 抛出（调用方可捕获）；
+        - 无交互终端（重定向 / CI / 管道）时不阻塞，直接返回 default。
+        - 仅支持 POSIX（macOS / Linux）；非 POSIX 平台直接返回 default。
         """
         choices = [str(choice) for choice in choices]
         if not choices:
             return default
 
-        if not self.console.is_terminal:
+        if not self.console.is_terminal or os.name != "posix":
             return default
 
-        for index, choice in enumerate(choices, 1):
-            self.console.print(f"  [select.option]{index}. {escape(choice)}[/select.option]")
+        index = 0
+        if default is not None and str(default) in choices:
+            index = choices.index(str(default))
+        height = len(choices)
 
-        keys = [str(i) for i in range(1, len(choices) + 1)] + choices
-        default_key = None
-        if default is not None:
-            default_key = str(default)
-            if default_key not in keys:
-                default_key = next(
-                    (str(i) for i, c in enumerate(choices, 1) if c == str(default)),
-                    None,
-                )
-
-        suffix = f" [dim](default: {default_key})[/dim]" if default_key else ""
-        answer = Prompt.ask(
+        self.console.print(
             f"[tag.select]{escape(TAG_TEXT['select'])}[/tag.select] "
             f"[select]? {escape(prompt)}[/select] "
-            f"[dim](1-{len(choices)})[/dim]{suffix}",
-            choices=keys,
-            default=default_key,
-            show_default=False,
+            f"[dim](↑/↓ 选择, Enter 确认, q 取消)[/dim]"
         )
+        self._draw_menu(choices, index)
 
-        if answer in choices:
-            return answer
-        return choices[int(answer) - 1]
+        fd = sys.stdin.fileno()
+        old_attrs = termios.tcgetattr(fd)
+        try:
+            # TCSADRAIN 而非默认的 TCSAFLUSH：不丢弃切换前已排队的按键输入
+            tty.setraw(fd, termios.TCSADRAIN)
+            while True:
+                key = self._read_key(fd)
+                if key == "up":
+                    index = (index - 1) % height
+                elif key == "down":
+                    index = (index + 1) % height
+                elif key == "enter":
+                    break
+                elif key in ("cancel", "escape"):
+                    self._clear_menu(height)
+                    self.console.print(
+                        f"[tag.select]{escape(TAG_TEXT['select'])}[/tag.select] "
+                        f"[select]? {escape(prompt)}[/select]: "
+                        f"[dim](cancelled)[/dim]"
+                    )
+                    return None
+                else:
+                    continue
+                self._redraw_menu(choices, index, height)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
+
+        self._clear_menu(height)
+        chosen = choices[index]
+        self.console.print(
+            f"[tag.select]{escape(TAG_TEXT['select'])}[/tag.select] "
+            f"[select]? {escape(prompt)}[/select]: "
+            f"[select.value]{escape(chosen)}[/select.value]"
+        )
+        return chosen
+
+    def _draw_menu(self, choices: list[str], index: int) -> None:
+        """首次绘制选项列表，光标停在列表末行（与 _redraw/_clear 约定一致）。"""
+        for i, choice in enumerate(choices):
+            if i == index:
+                self.console.print(f"  [select.highlight]❯ {escape(choice)}[/select.highlight]")
+            else:
+                self.console.print(f"  [select.option]  {escape(choice)}[/select.option]")
+
+    def _redraw_menu(self, choices: list[str], index: int, height: int) -> None:
+        """按键后整块重绘：光标在末行→上行到首行，逐行清写，光标回到末行。"""
+        self.console.file.write(f"\x1b[{height}A")
+        for i, choice in enumerate(choices):
+            self.console.file.write("\x1b[2K")
+            if i == index:
+                line = f"  [select.highlight]❯ {escape(choice)}[/select.highlight]"
+            else:
+                line = f"  [select.option]  {escape(choice)}[/select.option]"
+            self.console.print(line)
+        self.console.file.flush()
+
+    def _clear_menu(self, height: int) -> None:
+        """清除提示行与选项列表：光标在末行→上行到提示行，逐行清除。"""
+        self.console.file.write(f"\x1b[{height}A")
+        for i in range(height + 1):
+            self.console.file.write("\x1b[2K")
+            if i < height:
+                self.console.file.write("\r\n")
+        self.console.file.flush()
+
+    def _read_key(self, fd: int) -> str:
+        """raw mode 下读一个按键：方向键识别为转义序列。"""
+        first = os.read(fd, 1)
+        if first == b"\x1b":
+            ready, _, _ = select.select([fd], [], [], 0.15)
+            if ready:
+                rest = os.read(fd, 2)
+                if rest in (b"[A", b"[B", b"[C", b"[D"):
+                    return {b"[A": "up", b"[B": "down", b"[C": "right", b"[D": "left"}[rest]
+            return "escape"
+        if first in (b"\r", b"\n"):
+            return "enter"
+        if first == b"\x03":
+            raise KeyboardInterrupt
+        if first in (b"q", b"Q"):
+            return "cancel"
+        return "ignore"
 
     def exception(self) -> None:
         """在 except 块中调用，输出 Rich traceback 面板。
