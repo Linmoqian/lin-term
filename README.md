@@ -24,7 +24,7 @@ print("Dr:", Dr)
 > 程序负责表达事件，Terminal Language 负责赋予事件视觉语义。
 
 - 业务代码**不出现颜色名**，只出现语义：`success` / `warn` / `result` ...
-- 颜色表达状态，符号表达类型，缩进表达层级；去掉颜色仍然可读
+- 颜色表达状态，符号表达类型，标签表达语义，缩进表达层级；去掉颜色仍然可读，且可直接 `grep` 标签
 - 80% 灰白、20% 彩色的克制基调
 
 ## 安装
@@ -36,18 +36,18 @@ pip install lin-term             # 或从任意项目安装
 
 ## API（10 个核心行为）
 
-| 接口 | 符号 | 颜色 | 语义 |
-|---|---|---|---|
-| `stage(message)` | ▶ | bold blue | 大阶段开始（分隔线） |
-| `step(message, **ctx)` | → | blue | 阶段内操作步骤 |
-| `info(message, **ctx)` | ● | white | 普通信息 |
-| `metric(name, value, unit="")` | │ | cyan | 中间指标 |
-| `result(name, value, unit="")` | ◆ | bold cyan | 核心结果 |
-| `success(message, **ctx)` | ✓ | green | 成功 |
-| `warn(message, **ctx)` | ⚠ | yellow | 可继续的异常 |
-| `error(message, **ctx)` | ✗ | bold red | 失败（不自动 raise） |
-| `debug(message, **ctx)` | ◇ | dim magenta | 诊断信息，**默认关闭** |
-| `exception()` | 面板 | — | 在 except 块输出 traceback（debug 时含 locals） |
+| 接口 | 标签 | 符号 | 颜色 | 语义 |
+|---|---|---|---|---|
+| `stage(message)` | `[stage]` | ▶ | bold blue | 大阶段开始（分隔线） |
+| `step(message, **ctx)` | `[step]` | → | blue | 阶段内操作步骤 |
+| `info(message, **ctx)` | `[info]` | ● | white | 普通信息 |
+| `metric(name, value, unit="")` | `[metric]` | │ | cyan | 中间指标 |
+| `result(name, value, unit="")` | `[result]` | ◆ | bold cyan | 核心结果 |
+| `success(message, **ctx)` | `[success]` | ✓ | green | 成功 |
+| `warn(message, **ctx)` | `[warn]` | ⚠ | yellow | 可继续的异常 |
+| `error(message, **ctx)` | `[error]` | ✗ | bold red | 失败（不自动 raise） |
+| `debug(message, **ctx)` | `[debug]` | ◇ | dim magenta | 诊断信息，**默认关闭** |
+| `exception()` | — | 面板 | — | 在 except 块输出 traceback（debug 时含 locals） |
 
 辅助：`set_debug(enabled=True)` 开关调试模式；所有接口的上下文参数统一 `key=value` 形式（为未来结构化日志保留形状）。
 

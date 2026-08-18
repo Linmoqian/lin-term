@@ -29,9 +29,10 @@ TERMINAL_THEME = Theme(
         "result.value": "bold white",
         "result.unit": "dim",
         "success": "green",
-        "warning": "yellow",
+        "warn": "yellow",
         "error": "bold red",
         "debug": "dim magenta",
+        "tag": "dim",
         "context.key": "dim cyan",
         "context.value": "dim white",
     }
@@ -74,6 +75,20 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
+# 语义 → 文本标签：输出行前缀，与符号互补（符号扫视、颜色表状态、标签可 grep）
+TAG_TEXT = {
+    "stage": "[stage]",
+    "step": "[step]",
+    "info": "[info]",
+    "metric": "[metric]",
+    "result": "[result]",
+    "success": "[success]",
+    "warn": "[warn]",
+    "error": "[error]",
+    "debug": "[debug]",
+}
+
+
 class Terminal:
     """终端语义语言入口。每个进程共享一个实例：``from lin_term import term``。"""
 
@@ -89,17 +104,19 @@ class Terminal:
     def stage(self, message: str) -> None:
         """一个大的程序阶段开始：分隔线 + 标题。只用于大分区，不应频繁出现。"""
         self.console.print()
-        self.console.rule(f"[stage]▶ {escape(message)}[/stage]", align="left")
+        self.console.rule(
+            f"[tag]{escape(TAG_TEXT['stage'])}[/tag] "
+            f"[stage]▶ {escape(message)}[/stage]",
+            align="left",
+        )
 
     def step(self, message: str, **context: Any) -> None:
         """阶段内部的一个操作步骤。"""
-        self.console.print(f"[step]→ {escape(message)}[/step]")
-        self._context(**context)
+        self._line("step", "→", message, **context)
 
     def info(self, message: str, **context: Any) -> None:
         """普通信息，程序的背景声音，不抢视觉注意力。"""
-        self.console.print(f"[info]● {escape(message)}[/info]")
-        self._context(**context)
+        self._line("info", "●", message, **context)
 
     # ---- 数值 ----
 
@@ -113,7 +130,8 @@ class Terminal:
 
     def _kv_line(self, symbol: str, role: str, name: str, value: Any, unit: str) -> None:
         line = (
-            f"  [{role}.name]{symbol} {escape(name):<18}[/{role}.name]"
+            f"[tag]{escape(TAG_TEXT[role])}[/tag] "
+            f"[{role}.name]{symbol} {escape(name):<18}[/{role}.name]"
             f"[{role}.value]{escape(_format_value(value))}[/{role}.value]"
         )
         if unit:
@@ -124,25 +142,21 @@ class Terminal:
 
     def success(self, message: str, **context: Any) -> None:
         """操作成功完成。"""
-        self.console.print(f"[success]✓ {escape(message)}[/success]")
-        self._context(**context)
+        self._line("success", "✓", message, **context)
 
     def warn(self, message: str, **context: Any) -> None:
         """存在异常但程序可继续（数据不足、采用默认参数、已过滤 NaN……）。"""
-        self.console.print(f"[warning]⚠ {escape(message)}[/warning]")
-        self._context(**context)
+        self._line("warn", "⚠", message, **context)
 
     def error(self, message: str, **context: Any) -> None:
         """某项操作失败。只输出错误，不自动 raise。"""
-        self.console.print(f"[error]✗ {escape(message)}[/error]")
-        self._context(**context)
+        self._line("error", "✗", message, **context)
 
     def debug(self, message: str, **context: Any) -> None:
         """诊断信息，默认关闭，set_debug(True) 后输出。"""
         if not self.debug_enabled:
             return
-        self.console.print(f"[debug]◇ {escape(message)}[/debug]")
-        self._context(**context)
+        self._line("debug", "◇", message, **context)
 
     def exception(self) -> None:
         """在 except 块中调用，输出 Rich traceback 面板。
@@ -153,6 +167,14 @@ class Terminal:
         self.console.print_exception(show_locals=self.debug_enabled)
 
     # ---- 内部 ----
+
+    def _line(self, role: str, symbol: str, message: str, **context: Any) -> None:
+        """统一消息行：标签 + 符号 + 消息，再带可选上下文。"""
+        self.console.print(
+            f"[tag]{escape(TAG_TEXT[role])}[/tag] "
+            f"[{role}]{symbol} {escape(message)}[/{role}]"
+        )
+        self._context(**context)
 
     def _context(self, **kwargs: Any) -> None:
         """统一 key=value 上下文行；所有值走数值格式化。"""
