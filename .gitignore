@@ -1,0 +1,2 @@
+# 构建/安装产物（pip install -e . 生成）
+*.egg-info/
