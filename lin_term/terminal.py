@@ -15,35 +15,39 @@ from rich.markup import escape
 from rich.theme import Theme
 
 
-# 视觉映射：颜色表达状态，符号表达类型，缩进表达层级。
-# 去掉颜色后，符号（▶ → ● │ ◆ ✓ ⚠ ✗ ◇）仍能完整表达语义。
+# 视觉映射：对齐全局工程规范（颜色表达状态，符号表达类型）。
+# 绿=成功 黄=警告 红=错误 青=交互提示 蓝=高亮 灰=次要信息；
+# 去掉颜色后，标签与符号（[info] ▶ → ● │ ◆ ✓ ⚠ ✗ ◇）仍能完整表达语义。
 TERMINAL_THEME = Theme(
     {
-        "stage": "bold blue",
-        "step": "blue",
-        "info": "white",
-        "metric.name": "cyan",
-        "metric.value": "white",
-        "metric.unit": "dim",
-        "result.name": "bold cyan",
-        "result.value": "bold white",
-        "result.unit": "dim",
+        # 状态三色
         "success": "green",
         "warn": "yellow",
         "error": "bold red",
-        "debug": "dim magenta",
+        # 高亮与进行（蓝）
+        "stage": "bold blue",
+        "step": "blue",
+        "result.name": "bold blue",
+        "result.value": "bold white",
+        "result.unit": "dim",
+        # 次要信息（灰）
+        "info": "grey70",
+        "metric.name": "grey70",
+        "metric.value": "white",
+        "metric.unit": "dim",
+        "debug": "grey50",
+        "context.key": "dim grey70",
+        "context.value": "dim grey70",
         # 文本标签与语义同色：标签 + 符号 + 消息三段同色，扫视更直接
         "tag.stage": "bold blue",
         "tag.step": "blue",
-        "tag.info": "white",
-        "tag.metric": "cyan",
-        "tag.result": "bold cyan",
+        "tag.info": "grey70",
+        "tag.metric": "grey70",
+        "tag.result": "bold blue",
         "tag.success": "green",
         "tag.warn": "yellow",
         "tag.error": "bold red",
-        "tag.debug": "dim magenta",
-        "context.key": "dim cyan",
-        "context.value": "dim white",
+        "tag.debug": "grey50",
     }
 )
 
@@ -111,12 +115,11 @@ class Terminal:
     # ---- 阶段与操作 ----
 
     def stage(self, message: str) -> None:
-        """一个大的程序阶段开始：分隔线 + 标题。只用于大分区，不应频繁出现。"""
+        """一个大的程序阶段开始：空行 + 蓝色标题。不输出装饰性分隔线。"""
         self.console.print()
-        self.console.rule(
+        self.console.print(
             f"[tag.stage]{escape(TAG_TEXT['stage'])}[/tag.stage] "
-            f"[stage]▶ {escape(message)}[/stage]",
-            align="left",
+            f"[stage]▶ {escape(message)}[/stage]"
         )
 
     def step(self, message: str, **context: Any) -> None:
