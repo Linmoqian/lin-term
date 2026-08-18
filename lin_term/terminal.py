@@ -12,6 +12,7 @@ from typing import Any
 
 from rich.console import Console
 from rich.markup import escape
+from rich.prompt import Prompt
 from rich.theme import Theme
 
 
@@ -38,6 +39,10 @@ TERMINAL_THEME = Theme(
         "debug": "grey50",
         "context.key": "dim grey70",
         "context.value": "dim grey70",
+        # 交互提示（青）
+        "input": "cyan",
+        "select": "cyan",
+        "select.option": "dim cyan",
         # 文本标签与语义同色：标签 + 符号 + 消息三段同色，扫视更直接
         "tag.stage": "bold blue",
         "tag.step": "blue",
@@ -48,6 +53,8 @@ TERMINAL_THEME = Theme(
         "tag.warn": "yellow",
         "tag.error": "bold red",
         "tag.debug": "grey50",
+        "tag.input": "cyan",
+        "tag.select": "cyan",
     }
 )
 
@@ -99,6 +106,8 @@ TAG_TEXT = {
     "warn": "[warn]",
     "error": "[error]",
     "debug": "[debug]",
+    "input": "[input]",
+    "select": "[select]",
 }
 
 
@@ -169,6 +178,68 @@ class Terminal:
         if not self.debug_enabled:
             return
         self._line("debug", "◇", message, **context)
+
+    def input(self, prompt: str, *, default: str | None = None) -> str | None:
+        """等待用户输入自由文本（交互提示，青色）。
+
+        无交互终端（重定向 / CI / 管道）时不阻塞，直接返回 default；
+        Ctrl+C 由调用方决定是否捕获。
+        """
+        if not self.console.is_terminal:
+            return default
+
+        suffix = f" [dim](default: {escape(str(default))})[/dim]" if default is not None else ""
+        answer = Prompt.ask(
+            f"[tag.input]{escape(TAG_TEXT['input'])}[/tag.input] "
+            f"[input]? {escape(prompt)}[/input]{suffix}"
+        )
+        return answer if answer else default
+
+    def select(
+        self,
+        prompt: str,
+        choices: list[str],
+        *,
+        default: str | None = None,
+    ) -> str | None:
+        """等待用户从给定选项中选择一个（交互提示，青色）。
+
+        选项以编号列出，可输入编号或选项值，回车取 default；
+        非法输入自动重试。无交互终端时不阻塞，直接返回 default。
+        """
+        choices = [str(choice) for choice in choices]
+        if not choices:
+            return default
+
+        if not self.console.is_terminal:
+            return default
+
+        for index, choice in enumerate(choices, 1):
+            self.console.print(f"  [select.option]{index}. {escape(choice)}[/select.option]")
+
+        keys = [str(i) for i in range(1, len(choices) + 1)] + choices
+        default_key = None
+        if default is not None:
+            default_key = str(default)
+            if default_key not in keys:
+                default_key = next(
+                    (str(i) for i, c in enumerate(choices, 1) if c == str(default)),
+                    None,
+                )
+
+        suffix = f" [dim](default: {default_key})[/dim]" if default_key else ""
+        answer = Prompt.ask(
+            f"[tag.select]{escape(TAG_TEXT['select'])}[/tag.select] "
+            f"[select]? {escape(prompt)}[/select] "
+            f"[dim](1-{len(choices)})[/dim]{suffix}",
+            choices=keys,
+            default=default_key,
+            show_default=False,
+        )
+
+        if answer in choices:
+            return answer
+        return choices[int(answer) - 1]
 
     def exception(self) -> None:
         """在 except 块中调用，输出 Rich traceback 面板。

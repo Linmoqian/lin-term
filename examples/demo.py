@@ -125,6 +125,25 @@ def demo_exception() -> None:
         term.exception()
 
 
+def demo_interactive() -> None:
+    """交互演示：input / select（青色交互提示）。
+
+    无交互终端（重定向 / CI / 管道）时自动返回默认值，不会阻塞。
+    """
+
+    term.stage("Interactive")
+
+    output = term.input("Enter output filename", default="results.csv")
+    term.info("Output file", path=output)
+
+    model = term.select(
+        "Choose fitting model",
+        ["exponential", "power", "sinusoid"],
+        default="exponential",
+    )
+    term.result("model", model)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="开启调试输出")
@@ -136,6 +155,7 @@ def main() -> None:
     demo_analysis(data)
     demo_formatting()
     demo_exception()
+    demo_interactive()
 
     term.stage("Done")
 

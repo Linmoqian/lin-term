@@ -48,9 +48,11 @@ pip install lin-term             # 或从任意项目安装
 | `warn(message, **ctx)` | `[warn]` | ⚠ | yellow | 可继续的异常 |
 | `error(message, **ctx)` | `[error]` | ✗ | bold red | 失败（不自动 raise） |
 | `debug(message, **ctx)` | `[debug]` | ◇ | grey50 | 诊断信息（次要），**默认关闭** |
+| `input(prompt, default=None)` | `[input]` | ? | cyan | 等待用户输入自由文本 |
+| `select(prompt, choices, default=None)` | `[select]` | ? | cyan | 等待用户从选项中选择 |
 | `exception()` | — | 面板 | — | 在 except 块输出 traceback（debug 时含 locals） |
 
-颜色语义：绿=成功、黄=警告、红=错误、青=交互提示（V1 暂无交互接口）、蓝=高亮、灰=次要信息。
+颜色语义：绿=成功、黄=警告、红=错误、**青=交互提示**、蓝=高亮、灰=次要信息。
 
 辅助：`set_debug(enabled=True)` 开关调试模式；所有接口的上下文参数统一 `key=value` 形式（为未来结构化日志保留形状）。
 
@@ -63,6 +65,29 @@ pip install lin-term             # 或从任意项目安装
 - `NaN` / `Inf` / `-Inf` 大写明确
 - numpy 数组摘要为 `ndarray(48, 12842, 2) float64`，避免整数组刷屏
 - 其余类型原样 `str()`
+
+## 交互（青色）
+
+程序需要用户介入时使用，例如冲突需要确认、等待用户选择：
+
+```python
+output = term.input("Enter output filename", default="results.csv")
+# [input] ? Enter output filename (default: results.csv): _
+
+model = term.select(
+    "Choose fitting model",
+    ["exponential", "power", "sinusoid"],
+    default="exponential",
+)
+# [select] ? Choose fitting model (1-3) (default: 1): _
+#   1. exponential      ← 选项列表（dim cyan）
+#   2. power
+#   3. sinusoid
+```
+
+- `select` 可输入编号或选项值，非法输入自动重试，回车取默认值
+- **无交互终端（重定向 / CI / 管道）时两个接口都不阻塞**，直接返回 `default`（无默认则为 `None`），保证输出稳定可日志化
+- Ctrl+C 由调用方决定是否捕获
 
 ## 调试模式
 
