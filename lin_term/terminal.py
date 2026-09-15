@@ -9,11 +9,14 @@ from __future__ import annotations
 import math
 import numbers
 import os
-import select
 import sys
-import termios
-import tty
 from typing import Any, Iterable, Iterator
+
+# select 菜单的 raw 按键读取仅 POSIX 可用；Windows 降级为返回 default（见 select() 守卫）
+if os.name == "posix":
+    import select
+    import termios
+    import tty
 
 from rich.console import Console
 from rich.markup import escape
@@ -172,7 +175,17 @@ class Terminal:
     """终端语义语言入口。每个进程共享一个实例：``from lin_term import term``。"""
 
     def __init__(self, *, debug: bool = False):
-        self.console = Console(theme=TERMINAL_THEME)
+        # Windows 管道/重定向下 stdout 是 locale 编码（GBK），符号（▶ ✓ ⚠）会炸编码；
+        # 统一 UTF-8 并容错降级，保证日志文件跨平台可读
+        for _stream in (sys.stdout, sys.stderr):
+            if hasattr(_stream, "reconfigure"):
+                try:
+                    _stream.reconfigure(encoding="utf-8", errors="replace")
+                except (ValueError, OSError):
+                    pass
+        # legacy_windows=False 强制走 ANSI 路径：现代终端（Windows Terminal/
+        # PowerShell 7）原生支持，避免 rich 的 legacy win32 渲染按 GBK 写符号
+        self.console = Console(theme=TERMINAL_THEME, legacy_windows=False)
         self.debug_enabled = debug
 
     def set_debug(self, enabled: bool = True) -> None:
